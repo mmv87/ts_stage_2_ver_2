@@ -63,7 +63,7 @@ class ts_textual(Dataset):
                     except:
                         print('error in the line')
         
-        self.sliced_offset=self.byte_offset[:5000]
+        self.sliced_offset=self.byte_offset[:10000]
 
     def __len__(self):
         return len(self.sliced_offset)
