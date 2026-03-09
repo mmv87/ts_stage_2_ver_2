@@ -215,17 +215,23 @@ for epoch in range(2):  ##1 epochs
         ###ctr+=1
 
 ##x=len(epoch_losses)
-###save the ts_encoder and the llm_input_embedding
-saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver2.pth')
+###save the ts_encoder and the trained llm adapters
+
+saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_encoder_ver2_final.pth')
+torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
+model_wrapper.peft_model.config.save_embedding_layers = True
+model_wrapper.peft_model.save_pretrained(os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver2'),save_embedding_layers=True)
+
+"""saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver2.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
 ###embedding layer 
 embeds = model_wrapper.llm_model.get_input_embeddings().state_dict()
 torch.save(embeds, os.path.join(os.environ["SLURM_TMPDIR"], "aligned_embeddings_ver2.pt"))
 ##tokenizer saved
-tokenizer.save_pretrained(os.path.join(os.environ["SLURM_TMPDIR"],'llm_tokenizer'))
+tokenizer.save_pretrained(os.path.join(os.environ["SLURM_TMPDIR"],'llm_tokenizer'))"""
 
 ### save the plot
-out_path = os.path.join(os.environ["SLURM_TMPDIR"], "training_loss_MTS.png")
+out_path = os.path.join(os.environ["SLURM_TMPDIR"], "training_loss_ver2.png")
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
