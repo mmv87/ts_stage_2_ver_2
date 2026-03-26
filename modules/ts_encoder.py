@@ -7,7 +7,6 @@
 import torch.nn as nn  
 import torch
 
-
 class llm_projection(nn.Module):
     def __init__(self,conv_module,conv_features,trans_module,trans_embedding,d_fusion,d_llm):
         super().__init__()
@@ -27,7 +26,6 @@ class llm_projection(nn.Module):
     def forward(self,x):
         conv_embed= self.conv_module(x)
         trans_embed=self.trans_module(x)
-        
         z_conv=self.conv_proj(conv_embed)
         z_trans=self.trans_proj(trans_embed)
         

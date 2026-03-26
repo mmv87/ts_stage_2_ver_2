@@ -275,7 +275,7 @@ def collate_func(batch,tokenizer=None):
     padded_ts_data=[x['ts_input'] for x in batch] 
     ts_pairs=[x['ts_pairs'] for x in batch]
     ###assembler helper vars
-    ts_indices =[x['ts_indices'] for x in batch]
+    ts_indices =[x['ts_indices'] for x in batch] 
     text_indices=[x['text_indices'] for x in batch]
     
     return{

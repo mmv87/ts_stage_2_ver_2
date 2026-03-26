@@ -22,7 +22,6 @@ device ='cuda' if torch.cuda.is_available() else 'cpu'
 model_name="/home/mmk/projects/def-zonata/mmk/hf_cache/hub/models--microsoft--Phi-4-mini-reasoning/snapshots/7a8c4e2e81eae20a606d811f475d7dc316dd916a"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
-
 model = AutoModelForCausalLM.from_pretrained(model_name,local_files_only=True)
 ##expanded tokenizer path
 tokenizer_path =os.path.join(os.environ["SLURM_TMPDIR"],'llm_tokenizer')
@@ -34,7 +33,6 @@ model_dtype=next(model.parameters()).dtype
 """special_token_dict={'pad_token':"<|pad|>","additional_special_tokens":['<ts>','<ts/>']}
 tokenizer.add_special_tokens(special_token_dict)"""
 ##model.resize_token_embeddings(len(tokenizer))
-
 ##dataset fetching
 import json
 _json_file = os.path.join(os.environ["SLURM_TMPDIR"],"processed_dataset.jsonl")
@@ -94,8 +92,7 @@ class LLM_wrapper(nn.Module):
         num_ts_tokens=ts_embeddings.shape[2]
         ts_emb_dim=ts_embeddings.shape[3]
 
-        ##ts_embeddings=ts_embeddings.view(bs*c_in,num_ts_tokens,-1)
-        
+        ##ts_embeddings=ts_embeddings.view(bs*c_in,num_ts_tokens,-1)        
         input_embeds=self.llm_model.get_input_embeddings()(input_ids) ##[bs,seq_len,d_emb]
         ###print(f'input_embeds_shape:{input_embeds.shape}')
         input_embeds.requires_grad_(requires_grad=True)
@@ -116,12 +113,10 @@ class LLM_wrapper(nn.Module):
         ts_indices=ts_indices.expand(-1,text_emb_dim)
         text_indices=text_token_idx.squeeze(0).view(-1,1)
         text_indices=text_indices.expand(-1,text_emb_dim)
-        ##print(idx.shape)
-        ###print(idx_expanded)
+       
         ts_embeds_assemb= ts_container.scatter(dim=0,index=ts_indices,src=flat_ts_embeddings)
         text_embeds_assemb=text_container.scatter(dim=0,index=text_indices,src=flat_text_embeddings)
         final_tensor=ts_embeds_assemb+text_embeds_assemb
-        ###print(f'final_tensor:{final_tensor.shape}')
         assemb_embed_tensor.append(final_tensor)
         
         return torch.stack(assemb_embed_tensor)
@@ -137,7 +132,7 @@ class LLM_wrapper(nn.Module):
         attention_mask = attention_mask.to(self.device)
         labels = labels.to(self.device)
         ##print(f'labels:{labels.shape}')
-        output= self.llm_model(inputs_embeds=input_embeddings,attention_mask=attention_mask,labels=labels)
+        output= self.peft_model(inputs_embeds=input_embeddings,attention_mask=attention_mask,labels=labels)
         
         return output,input_embeddings
     
@@ -173,6 +168,7 @@ def check_ts_gradients(ts_encoder):
 ###different learing rates for enc and llm_model
 for name, param in model_wrapper.ts_encoder.named_parameters():
     param.requires_grad = True
+    
 encoder_params = list(model_wrapper.ts_encoder.parameters())
 llm_trainable_params = [p for n,p in model_wrapper.peft_model.named_parameters() if p.requires_grad]
 
@@ -198,7 +194,7 @@ for epoch in range(2):  ##1 epochs
         ts_indices=batch["ts_indices"].to(device)
         textual_indices=batch['textual_indices'].to(device)
         ###ts_mask = batch['ts_mask'].to(device)
-
+        
         ##model_wrapper=LLM_wrapper(tokenizer,ts_input,model,device=device)
         optimizer.zero_grad()
         outputs,_= model_wrapper(input_ids=input_ids,ts_input=ts_input,ts_pairs=ts_pairs,ts_idx=ts_indices,text_idx=textual_indices,attention_mask=attention_mask,labels=labels_batch,)
