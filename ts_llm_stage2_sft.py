@@ -47,8 +47,8 @@ dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:coll
 ##Lora_config defintion based on best practices
 peft_config = LoraConfig(
             r=16, lora_alpha=32,
-            target_modules=["q_proj", "v_proj","k_proj", "o_proj","gate_proj", "up_proj", "down_proj"],
-            modules_to_save=["embed_tokens",'projection'],lora_dropout=0.1, # Very important for Stage-2
+            target_modules=["o_proj",'qkv_proj','gate_up_proj','down_proj'],
+            modules_to_save=["embed_tokens",'lm_head'],lora_dropout=0.1, # Very important for Stage-2
             task_type="CAUSAL_LM",ensure_weight_tying=True)
 
 class LLM_wrapper(nn.Module):
@@ -215,8 +215,9 @@ for epoch in range(2):  ##1 epochs
 
 saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_encoder_ver2_final.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
+
 model_wrapper.peft_model.config.save_embedding_layers = True
-model_wrapper.peft_model.save_pretrained(os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver2'),save_embedding_layers=True)
+model_wrapper.peft_model.save_pretrained(save_directory=os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver2'),save_embedding_layers=True)
 
 """saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver2.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
