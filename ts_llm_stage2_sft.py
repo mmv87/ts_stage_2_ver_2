@@ -200,7 +200,7 @@ for epoch in range(2):  ##1 epochs
         outputs,_= model_wrapper(input_ids=input_ids,ts_input=ts_input,ts_pairs=ts_pairs,ts_idx=ts_indices,text_idx=textual_indices,attention_mask=attention_mask,labels=labels_batch,)
         loss=outputs.loss
         loss.backward()  
-        ##check_ts_gradients(model_wrapper.ts_encoder)##gradient calculation
+        check_ts_gradients(model_wrapper.ts_encoder)##gradient calculation
         running_loss+=loss.item()
         num_batches+=1
         optimizer.step()
@@ -216,7 +216,7 @@ for epoch in range(2):  ##1 epochs
 saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_encoder_ver2_final.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
 
-model_wrapper.peft_model.config.save_embedding_layers = True
+##model_wrapper.peft_model.config.save_embedding_layers = True
 model_wrapper.peft_model.save_pretrained(save_directory=os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver2'),save_embedding_layers=True)
 
 """saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver2.pth')
@@ -233,8 +233,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
 
-plt.figure(figsize=(8, 5))
-plt.plot(epoch_losses, marker='o')
+plt.figure(figsize=(10,15))
+plt.plot(epoch_losses)
 plt.title("Training Loss Trend Over Epochs")
 plt.xlabel("Epoch")
 plt.ylabel("Average Loss")
