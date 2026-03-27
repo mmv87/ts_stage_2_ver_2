@@ -60,6 +60,7 @@ class LLM_wrapper(nn.Module):
         self.P=patch_len
         self.device=device
         self.conv_layers=conv_layers
+        self.peft_config=peft_config
         
         ##resize the input_embedding_layer
         self.llm_model.resize_token_embeddings(len(self.tokenizer))
@@ -68,8 +69,11 @@ class LLM_wrapper(nn.Module):
             self.llm_model.get_input_embeddings().load_state_dict(torch.load(embed_path))
             
         ###creating peft model for stage-2 training
-        if peft_config:
-            self.peft_model=get_peft_model(self.llm_model,peft_config)
+        if self.peft_config:
+            self.peft_model=get_peft_model(self.llm_model,self.peft_config)
+            # SAFETY CHECK: Force embeddings to be trainable if they are in modules_to_save
+            if "embed_tokens" in self.peft_config.modules_to_save:
+                self.peft_model.get_input_embeddings().requires_grad_(True)
         
         self.ts_conv_module=ConvFeatureExtraction(self.conv_layers,dropout=0.1)
         self.ts_transformer=PatchTSTEncoder(patch_len=self.P,n_layers=2,d_model=512,n_heads=4,
