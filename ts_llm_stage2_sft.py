@@ -223,10 +223,8 @@ for epoch in range(1):  ##1 epochs
 
 ##x=len(epoch_losses)
 ###save the ts_encoder and the trained llm adapters
-
 saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_encoder_ver2_final.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
-
 
 ##model_wrapper.peft_model.config.save_embedding_layers = True
 model_wrapper.peft_model.save_pretrained(save_directory=os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver2'),save_embedding_layers=True)
