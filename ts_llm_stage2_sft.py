@@ -71,17 +71,23 @@ class LLM_wrapper(nn.Module):
             self.peft_model=get_peft_model(self.llm_model,self.peft_config)
             
             if "embed_tokens" in self.peft_config.modules_to_save:
-                embed_layer = self.peft_model.get_input_embeddings()
-                
+                embed_layer = self.peft_model.get_input_embeddings() 
             if hasattr(embed_layer, "modules_to_save"):
                 embed_layer.modules_to_save.default.weight.requires_grad_(True)
             else:
                 embed_layer.requires_grad_(True)
 
             # CRITICAL: Re-tie the weights to ensure Stage-2 updates the Manifold    
-            self.peft_model.base_model.model.lm_head.weight = self.peft_model.get_input_embeddings().weight
+            self.peft_model.get_output_embeddings().weight = self.peft_model.get_input_embeddings().weight
+            
             # If this prints 'True', your Stage-2 alignment will physically move the manifold
-            print(f"Tied: {id(self.peft_model.get_input_embeddings().weight) == id(self.peft_model.base_model.model.lm_head.weight)}")
+            in_ptr = self.peft_model.get_input_embeddings().weight.data_ptr()
+            out_ptr = self.peft_model.get_output_embeddings().weight.data_ptr()
+            if in_ptr == out_ptr:
+                print(f"Manifold Unified: Input/Output tied at {hex(in_ptr)}")
+            else:
+                raise RuntimeError("Weight tie failed! Manifolds are still split.")
+            ##print(f"Tied: {id(self.peft_model.get_input_embeddings().weight) == id(self.peft_model.base_model.model.lm_head.weight)}")
 
         self.ts_conv_module=ConvFeatureExtraction(self.conv_layers,dropout=0.1)
         self.ts_transformer=PatchTSTEncoder(patch_len=self.P,n_layers=2,d_model=512,n_heads=4,
