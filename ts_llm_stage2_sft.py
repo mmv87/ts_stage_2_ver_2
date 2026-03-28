@@ -48,7 +48,7 @@ dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:coll
 peft_config = LoraConfig(
             r=16, lora_alpha=32,
             target_modules=["o_proj",'qkv_proj','gate_up_proj','down_proj'],
-            modules_to_save=["embed_tokens",'lm_head'],lora_dropout=0.1, # Very important for Stage-2
+            modules_to_save=["embed_tokens"],lora_dropout=0.1, # important for Stage-2  as to keep th ties
             task_type="CAUSAL_LM",ensure_weight_tying=True)
 
 class LLM_wrapper(nn.Module):
@@ -61,20 +61,28 @@ class LLM_wrapper(nn.Module):
         self.device=device
         self.conv_layers=conv_layers
         self.peft_config=peft_config
-        
         ##resize the input_embedding_layer
         self.llm_model.resize_token_embeddings(len(self.tokenizer))
-        
         if embed_path:
             self.llm_model.get_input_embeddings().load_state_dict(torch.load(embed_path))
             
         ###creating peft model for stage-2 training
         if self.peft_config:
             self.peft_model=get_peft_model(self.llm_model,self.peft_config)
-            # SAFETY CHECK: Force embeddings to be trainable if they are in modules_to_save
+            
             if "embed_tokens" in self.peft_config.modules_to_save:
-                self.peft_model.get_input_embeddings().requires_grad_(True)
-        
+                embed_layer = self.peft_model.get_input_embeddings()
+                
+            if hasattr(embed_layer, "modules_to_save"):
+                embed_layer.modules_to_save.default.weight.requires_grad_(True)
+            else:
+                embed_layer.requires_grad_(True)
+
+            # CRITICAL: Re-tie the weights to ensure Stage-2 updates the Manifold    
+            self.peft_model.base_model.model.lm_head.weight = self.peft_model.get_input_embeddings().weight
+            # If this prints 'True', your Stage-2 alignment will physically move the manifold
+            print(f"Tied: {id(self.peft_model.get_input_embeddings().weight) == id(self.peft_model.base_model.model.lm_head.weight)}")
+
         self.ts_conv_module=ConvFeatureExtraction(self.conv_layers,dropout=0.1)
         self.ts_transformer=PatchTSTEncoder(patch_len=self.P,n_layers=2,d_model=512,n_heads=4,
                                 shared_embedding=True,d_ff=1024,norm='Layer',attn_dropout=0.,dropout=0.1,activation='gelu',store_attn=False,res_attention=False,pre_norm=True,pe='zeros',learn_pe=True,verbose=False)
@@ -97,11 +105,10 @@ class LLM_wrapper(nn.Module):
         ts_emb_dim=ts_embeddings.shape[3]
 
         ##ts_embeddings=ts_embeddings.view(bs*c_in,num_ts_tokens,-1)        
-        input_embeds=self.llm_model.get_input_embeddings()(input_ids) ##[bs,seq_len,d_emb]
+        input_embeds=self.peft_model.get_input_embeddings()(input_ids) ##[bs,seq_len,d_emb]
         ###print(f'input_embeds_shape:{input_embeds.shape}')
-        input_embeds.requires_grad_(requires_grad=True)
+        ###input_embeds.requires_grad_(requires_grad=True)
         text_emb_dim= input_embeds.shape[2]
-
         assert (ts_emb_dim==text_emb_dim)
         T_new=ts_token_idx.shape[1]+text_token_idx.shape[1]
         ts_container =torch.zeros((T_new,text_emb_dim),device=self.device) ### total_idx,total_idx
@@ -111,7 +118,6 @@ class LLM_wrapper(nn.Module):
         ##print(f'ts_embedding_flat:{flat_ts_embeddings.shape}')
         
         flat_text_embeddings=input_embeds.squeeze(0)
-        
         ##get the indices after the <ts>....<ts/> placeholder is offseted
         ts_indices=ts_token_idx.squeeze(0).view(-1,1)
         ts_indices=ts_indices.expand(-1,text_emb_dim)
@@ -148,6 +154,7 @@ conv_layers=[(128,5,1),(64,3,1)]
 model_wrapper=LLM_wrapper(tokenizer_modified,conv_layers,128,model,device=device,ts_checkpoint=ts_encoder_weights,embed_path=embed_path,peft_config=peft_config)
 model_wrapper.train()
 model_wrapper.to(device)
+
 ####check the gradient
 def check_ts_gradients(ts_encoder):
     print("\n--- Gradient Flow Check: TS Encoder ---")
@@ -161,7 +168,7 @@ def check_ts_gradients(ts_encoder):
         else:
             grad_norm = param.grad.norm().item()
             print(f"{name}: Grad Norm = {grad_norm:.5f}")
-            if grad_norm > 1e-9:
+            if grad_norm > 1e-6:
                 any_grad = True
                 
     if not any_grad:
@@ -183,7 +190,7 @@ optimizer = torch.optim.AdamW([
 ##** freeze the LLM for stage-1 training
 epoch_losses=[]
 
-for epoch in range(2):  ##1 epochs
+for epoch in range(1):  ##1 epochs
     pbar = tqdm(dataloader, desc=f"Epoch {epoch}")
     num_batches = 0
     running_loss=0
@@ -219,6 +226,7 @@ for epoch in range(2):  ##1 epochs
 
 saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_encoder_ver2_final.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
+
 
 ##model_wrapper.peft_model.config.save_embedding_layers = True
 model_wrapper.peft_model.save_pretrained(save_directory=os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver2'),save_embedding_layers=True)
