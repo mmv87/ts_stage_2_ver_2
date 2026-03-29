@@ -88,12 +88,8 @@ class LLM_wrapper(nn.Module):
             output_layer.register_parameter("weight", input_weight)
                 
             # If this prints 'True', your Stage-2 alignment will physically move the manifold
-            in_ptr = self.peft_model.get_input_embeddings().weight.data_ptr()
-            out_ptr = self.peft_model.get_output_embeddings().weight.data_ptr()
-            if in_ptr == out_ptr:
-                print(f"Manifold Unified: Input/Output tied at {hex(in_ptr)}")
-            else:
-                raise RuntimeError("Weight tie failed! Manifolds are still split.")
+            assert id(self.peft_model.get_input_embeddings().weight) == id(self.peft_model.get_output_embeddings().weight)
+            print("Weight tie successfully established via register_parameter.")
             ##print(f"Tied: {id(self.peft_model.get_input_embeddings().weight) == id(self.peft_model.base_model.model.lm_head.weight)}")
 
         self.ts_conv_module=ConvFeatureExtraction(self.conv_layers,dropout=0.1)
