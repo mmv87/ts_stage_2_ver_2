@@ -78,8 +78,15 @@ class LLM_wrapper(nn.Module):
                 embed_layer.requires_grad_(True)
 
             # CRITICAL: Re-tie the weights to ensure Stage-2 updates the Manifold    
-            self.peft_model.get_output_embeddings().weight = self.peft_model.get_input_embeddings().weight
+            output_layer=self.peft_model.get_output_embeddings()
+            input_weight=self.peft_model.get_input_embeddings().weight
             
+            if hasattr(output_layer, "weight"):
+                delattr(output_layer, "weight")
+                
+            # 4. Physically tie the reference
+            output_layer.register_parameter("weight", input_weight)
+                
             # If this prints 'True', your Stage-2 alignment will physically move the manifold
             in_ptr = self.peft_model.get_input_embeddings().weight.data_ptr()
             out_ptr = self.peft_model.get_output_embeddings().weight.data_ptr()
