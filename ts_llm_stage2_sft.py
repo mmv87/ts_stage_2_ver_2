@@ -72,21 +72,29 @@ class LLM_wrapper(nn.Module):
             
             if "embed_tokens" in self.peft_config.modules_to_save:
                 embed_layer = self.peft_model.get_input_embeddings() 
+                
             if hasattr(embed_layer, "modules_to_save"):
                 embed_layer.modules_to_save.default.weight.requires_grad_(True)
             else:
                 embed_layer.requires_grad_(True)
 
             # CRITICAL: Re-tie the weights to ensure Stage-2 updates the Manifold    
-            output_layer=self.peft_model.get_output_embeddings()
-            input_weight=self.peft_model.get_input_embeddings().weight
+            input_wrapper=self.peft_model.get_output_embeddings()
+            output_wrapper=self.peft_model.get_input_embeddings()
             
-            if hasattr(output_layer, "weight"):
-                delattr(output_layer, "weight")
-                
-            # 4. Physically tie the reference
-            output_layer.register_parameter("weight", input_weight)
-                
+            if hasattr(input_wrapper, "modules_to_save") and hasattr(output_wrapper, "modules_to_save"):
+                # Target the actual trainable weight tensor in the input
+                trainable_weight = input_wrapper.modules_to_save.default.weight
+                # Target the 'default' module inside the output wrapper
+                target_module = output_wrapper.modules_to_save.default
+
+                # Surgical re-tie: Delete the pointer and re-register
+                # We do this on the .default module, which is a standard nn.Linear/nn.Embedding
+                if hasattr(target_module, "weight"):
+                    delattr(target_module, "weight")
+                    
+                target_module.register_parameter("weight", trainable_weight)
+              
             # If this prints 'True', your Stage-2 alignment will physically move the manifold
             assert id(self.peft_model.get_input_embeddings().weight) == id(self.peft_model.get_output_embeddings().weight)
             print("Weight tie successfully established via register_parameter.")
