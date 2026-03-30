@@ -178,14 +178,16 @@ model_wrapper.to(device)
 def check_input_emb(peft_model):
     embedding_norms = []
     for name, param in peft_model.named_parameters():
-        if param.requires_grad and param.grad is not None:
+        if "modules_to_save" in name or "embed_tokens" in name:
             grad_norm = param.grad.detach().data.norm(2).item()
-            if "modules_to_save" in name or "embed_tokens" in name:
-                embedding_norms.append(grad_norm)
+            embedding_norms.append(grad_norm)
 
-    avg_emb_norm = sum(embedding_norms) / len(embedding_norms) if embedding_norms else 0
-    print(f"embed_norm:{avg_emb_norm:.5f}")
-          
+            avg_emb_norm = sum(embedding_norms) / len(embedding_norms) if embedding_norms else 0
+            print(f"embed_norm:{avg_emb_norm:.5f}")
+            
+        else:
+            continue
+    
 def check_ts_gradients(ts_encoder):
     print("\n--- Gradient Flow Check: TS Encoder ---")
     any_grad = False
@@ -241,7 +243,7 @@ for epoch in range(1):  ##1 epochs
         outputs,_= model_wrapper(input_ids=input_ids,ts_input=ts_input,ts_pairs=ts_pairs,ts_idx=ts_indices,text_idx=textual_indices,attention_mask=attention_mask,labels=labels_batch,)
         loss=outputs.loss
         loss.backward()  
-        check_ts_gradients(model_wrapper.ts_encoder)##gradient calculation
+        ##check_ts_gradients(model_wrapper.ts_encoder)##gradient calculation
         check_input_emb(model_wrapper.peft_model)
         running_loss+=loss.item()
         num_batches+=1
