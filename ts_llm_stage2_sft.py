@@ -70,6 +70,8 @@ class LLM_wrapper(nn.Module):
         ###creating peft model for stage-2 training
         if self.peft_config:
             self.peft_model=get_peft_model(self.llm_model,self.peft_config)
+            self.peft_model.train()
+            
         
         print(f"Embeddings trainable:{self.peft_model.base_model.model.model.embed_tokens.weight.requires_grad}")
    
@@ -123,7 +125,14 @@ class LLM_wrapper(nn.Module):
         ts_emb_dim=ts_embeddings.shape[3]
 
         ##ts_embeddings=ts_embeddings.view(bs*c_in,num_ts_tokens,-1)        
-        input_embeds=self.peft_model.get_input_embeddings()(input_ids) ##[bs,seq_len,d_emb]
+        embed_module=self.peft_model.get_input_embeddings()(input_ids) ##[bs,seq_len,d_emb]
+        ##explicitly setting the embed from the default
+        if hasattr(embed_module, "modules_to_save"):
+            input_embeds = embed_module.modules_to_save.default(input_ids)
+        else:
+            # Fallback if PEFT isn't initialized or for base mode
+            input_embeds = embed_module(input_ids)
+            
         ###print(f'input_embeds_shape:{input_embeds.shape}')
         ###input_embeds.requires_grad_(requires_grad=True)
         text_emb_dim= input_embeds.shape[2]
@@ -176,34 +185,27 @@ model_wrapper.to(device)
 ####check the gradient
 
 def check_input_emb(peft_model):
-    for name, param in peft_model.named_parameters():
-        # Target the specific laye
-        if ("modules_to_save" in name or "embed_tokens" in name) and "weight" in name:
-            # 1. Safety Check: Is there a gradient?
-            if param.grad is None:
-                # This happens if the layer is frozen or backward() wasn't called
-                print(f"Skipping {name}: No gradient found (None).")
-                continue
-            # 2. Safety Check: Is it the right shape? 
-            # (Embedding grads are [vocab_size, emb_dim])
-            if param.grad.dim() < 2:
-                continue
-            with torch.no_grad():
-                # --- Row-wise Calculation (Per-token) ---
-                # Calculate norm along the embedding dimension (dim=1)
-                per_token_norms = torch.linalg.vector_norm(param.grad, ord=2, dim=1)
-                # Identify tokens that were actually in the batch (non-zero grad)
-                active_mask = per_token_norms > 0
-                active_norms = per_token_norms[active_mask]
-                
-                if active_norms.numel() > 0:
-                    avg_active = active_norms.mean().item()
-                    max_active = active_norms.max().item()
-                    print(f"[{name}] Active Tokens: {active_norms.numel()} | "
-                          f"Avg Active Norm: {avg_active:.6f} | Max: {max_active:.6f}")
-                else:
-                    # The layer is trainable, but no tokens from this batch updated it
-                    print(f"[{name}] Layer is trainable but 0 tokens were active in this batch.")
+    emb_layer = peft_model.get_input_embeddings()
+    # 2. Check if it's a PEFT wrapper (ModulesToSaveWrapper)
+    # If so, we want the 'default' (trainable) module, not 'original_module'
+    if hasattr(emb_layer, "modules_to_save"):
+        active_emb = emb_layer.modules_to_save.default
+    else:
+        active_emb = emb_layer
+
+    # 3. Probe the gradient
+    if active_emb.weight.grad is not None:
+        with torch.no_grad():
+            # Global norm for the whole layer
+            total_norm = active_emb.weight.grad.norm(2).item()
+            # Row-wise norm to see active tokens (as discussed)
+            per_token_norms = torch.linalg.vector_norm(active_emb.weight.grad, ord=2, dim=1)
+            active_tokens = (per_token_norms > 0).sum().item()
+            print(f"--- Embedding Check ---")
+            print(f"Total Grad Norm: {total_norm:.6f}")
+            print(f"Active Tokens in Batch: {active_tokens}")
+    else:
+        print("CRITICAL: Active embedding layer has NO gradient. Check if loss.backward() was called.")
     
 def check_ts_gradients(ts_encoder):
     print("\n--- Gradient Flow Check: TS Encoder ---")
@@ -286,7 +288,6 @@ embeds = model_wrapper.llm_model.get_input_embeddings().state_dict()
 torch.save(embeds, os.path.join(os.environ["SLURM_TMPDIR"], "aligned_embeddings_ver2.pt"))
 ##tokenizer saved
 tokenizer.save_pretrained(os.path.join(os.environ["SLURM_TMPDIR"],'llm_tokenizer'))"""
-
 ### save the plot
 out_path = os.path.join(os.environ["SLURM_TMPDIR"], "training_loss_ver2.png")
 import matplotlib.pyplot as plt
