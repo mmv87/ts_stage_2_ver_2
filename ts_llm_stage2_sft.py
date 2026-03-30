@@ -176,17 +176,34 @@ model_wrapper.to(device)
 ####check the gradient
 
 def check_input_emb(peft_model):
-    embedding_norms = []
     for name, param in peft_model.named_parameters():
-        if "modules_to_save" in name or "embed_tokens" in name:
-            grad_norm = param.grad.detach().data.norm(2).item()
-            embedding_norms.append(grad_norm)
-
-            avg_emb_norm = sum(embedding_norms) / len(embedding_norms) if embedding_norms else 0
-            print(f"embed_norm:{avg_emb_norm:.5f}")
-            
-        else:
-            continue
+        # Target the specific laye
+        if ("modules_to_save" in name or "embed_tokens" in name) and "weight" in name:
+            # 1. Safety Check: Is there a gradient?
+            if param.grad is None:
+                # This happens if the layer is frozen or backward() wasn't called
+                print(f"Skipping {name}: No gradient found (None).")
+                continue
+            # 2. Safety Check: Is it the right shape? 
+            # (Embedding grads are [vocab_size, emb_dim])
+            if param.grad.dim() < 2:
+                continue
+            with torch.no_grad():
+                # --- Row-wise Calculation (Per-token) ---
+                # Calculate norm along the embedding dimension (dim=1)
+                per_token_norms = torch.linalg.vector_norm(param.grad, ord=2, dim=1)
+                # Identify tokens that were actually in the batch (non-zero grad)
+                active_mask = per_token_norms > 0
+                active_norms = per_token_norms[active_mask]
+                
+                if active_norms.numel() > 0:
+                    avg_active = active_norms.mean().item()
+                    max_active = active_norms.max().item()
+                    print(f"[{name}] Active Tokens: {active_norms.numel()} | "
+                          f"Avg Active Norm: {avg_active:.6f} | Max: {max_active:.6f}")
+                else:
+                    # The layer is trainable, but no tokens from this batch updated it
+                    print(f"[{name}] Layer is trainable but 0 tokens were active in this batch.")
     
 def check_ts_gradients(ts_encoder):
     print("\n--- Gradient Flow Check: TS Encoder ---")
