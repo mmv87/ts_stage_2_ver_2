@@ -48,7 +48,7 @@ dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:coll
 peft_config = LoraConfig(
             r=16, lora_alpha=32,
             target_modules=["o_proj",'qkv_proj','gate_up_proj','down_proj'],
-            modules_to_save=["lm_head"],lora_dropout=0.1, # important for Stage-2  as to keep th ties
+            modules_to_save=["embed_tokens"],lora_dropout=0.1, # important for Stage-2  as to keep th ties
             task_type="CAUSAL_LM",ensure_weight_tying=True)
 
 class LLM_wrapper(nn.Module):
@@ -70,8 +70,10 @@ class LLM_wrapper(nn.Module):
         ###creating peft model for stage-2 training
         if self.peft_config:
             self.peft_model=get_peft_model(self.llm_model,self.peft_config)
+        
+        print(f"Embeddings trainable:{self.peft_model.base_model.model.model.embed_tokens.weight.requires_grad}")
    
-            """  if "embed_tokens" in self.peft_config.modules_to_save:
+        """  if "embed_tokens" in self.peft_config.modules_to_save:
                 embed_layer = self.peft_model.get_input_embeddings() 
                 
             if hasattr(embed_layer, "modules_to_save"):
@@ -167,11 +169,23 @@ ts_encoder_weights=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver2.p
 embed_path=os.path.join(os.environ["SLURM_TMPDIR"],'aligned_embeddings_ver2.pt')
 
 conv_layers=[(128,5,1),(64,3,1)]
-model_wrapper=LLM_wrapper(tokenizer_modified,conv_layers,128,model,device=device,ts_checkpoint=ts_encoder_weights,embed_path=embed_path,peft_config=peft_config)
+model_wrapper=LLM_wrapper(tokenizer_modified,conv_layers,128,model,device=device,ts_checkpoint=ts_encoder_weights,embed_path=None,peft_config=peft_config)
 model_wrapper.train()
 model_wrapper.to(device)
 
 ####check the gradient
+
+def check_input_emb(peft_model):
+    embedding_norms = []
+    for name, param in peft_model.named_parameters():
+        if param.requires_grad and param.grad is not None:
+            grad_norm = param.grad.detach().data.norm(2).item()
+            if "modules_to_save" in name or "embed_tokens" in name:
+                embedding_norms.append(grad_norm)
+
+    avg_emb_norm = sum(embedding_norms) / len(embedding_norms) if embedding_norms else 0
+    print(f"embed_norm:{avg_emb_norm:.5f}")
+          
 def check_ts_gradients(ts_encoder):
     print("\n--- Gradient Flow Check: TS Encoder ---")
     any_grad = False
@@ -228,6 +242,7 @@ for epoch in range(1):  ##1 epochs
         loss=outputs.loss
         loss.backward()  
         check_ts_gradients(model_wrapper.ts_encoder)##gradient calculation
+        check_input_emb(model_wrapper.peft_model)
         running_loss+=loss.item()
         num_batches+=1
         optimizer.step()
