@@ -36,7 +36,6 @@ tokenizer.add_special_tokens(special_token_dict)"""
 ##dataset fetching
 import json
 _json_file = os.path.join(os.environ["SLURM_TMPDIR"],"processed_dataset.jsonl")
-
 ###datapipeline
 dataset=ts_textual(128,128,tokenizer_modified,_json_file,device=device)
 dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:collate_func(b,tokenizer=tokenizer_modified))
@@ -71,8 +70,6 @@ class LLM_wrapper(nn.Module):
         if self.peft_config:
             self.peft_model=get_peft_model(self.llm_model,self.peft_config)
             self.peft_model.train()
-            
-        
         print(f"Embeddings trainable:{self.peft_model.base_model.model.model.embed_tokens.weight.requires_grad}")
    
         """  if "embed_tokens" in self.peft_config.modules_to_save:
@@ -125,14 +122,16 @@ class LLM_wrapper(nn.Module):
         ts_emb_dim=ts_embeddings.shape[3]
 
         ##ts_embeddings=ts_embeddings.view(bs*c_in,num_ts_tokens,-1)        
-        embed_module=self.peft_model.get_input_embeddings()(input_ids) ##[bs,seq_len,d_emb]
+        embed_module=self.peft_model.get_input_embeddings()  ##[bs,seq_len,d_emb]
         ##explicitly setting the embed from the default
         if hasattr(embed_module, "modules_to_save"):
             input_embeds = embed_module.modules_to_save.default(input_ids)
         else:
             # Fallback if PEFT isn't initialized or for base mode
             input_embeds = embed_module(input_ids)
-            
+        
+        
+        print(f'input_embeds_shape:{input_embeds.shape}')
         ###print(f'input_embeds_shape:{input_embeds.shape}')
         ###input_embeds.requires_grad_(requires_grad=True)
         text_emb_dim= input_embeds.shape[2]
