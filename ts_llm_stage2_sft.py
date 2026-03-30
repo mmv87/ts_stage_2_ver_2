@@ -48,7 +48,7 @@ dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:coll
 peft_config = LoraConfig(
             r=16, lora_alpha=32,
             target_modules=["o_proj",'qkv_proj','gate_up_proj','down_proj'],
-            modules_to_save=["embed_tokens"],lora_dropout=0.1, # important for Stage-2  as to keep th ties
+            modules_to_save=["lm_head"],lora_dropout=0.1, # important for Stage-2  as to keep th ties
             task_type="CAUSAL_LM",ensure_weight_tying=True)
 
 class LLM_wrapper(nn.Module):
@@ -63,14 +63,15 @@ class LLM_wrapper(nn.Module):
         self.peft_config=peft_config
         ##resize the input_embedding_layer
         self.llm_model.resize_token_embeddings(len(self.tokenizer))
+        
         if embed_path:
             self.llm_model.get_input_embeddings().load_state_dict(torch.load(embed_path))
             
         ###creating peft model for stage-2 training
         if self.peft_config:
             self.peft_model=get_peft_model(self.llm_model,self.peft_config)
-            
-            if "embed_tokens" in self.peft_config.modules_to_save:
+   
+            """  if "embed_tokens" in self.peft_config.modules_to_save:
                 embed_layer = self.peft_model.get_input_embeddings() 
                 
             if hasattr(embed_layer, "modules_to_save"):
@@ -87,7 +88,6 @@ class LLM_wrapper(nn.Module):
                 trainable_weight = input_wrapper.modules_to_save.default.weight
                 # Target the 'default' module inside the output wrapper
                 target_module = output_wrapper.modules_to_save.default
-
                 # Surgical re-tie: Delete the pointer and re-register
                 # We do this on the .default module, which is a standard nn.Linear/nn.Embedding
                 if hasattr(target_module, "weight"):
@@ -97,9 +97,9 @@ class LLM_wrapper(nn.Module):
               
             # If this prints 'True', your Stage-2 alignment will physically move the manifold
             assert id(self.peft_model.get_input_embeddings().weight) == id(self.peft_model.get_output_embeddings().weight)
-            print("Weight tie successfully established via register_parameter.")
+            print("Weight tie successfully established via register_parameter.")"""
             ##print(f"Tied: {id(self.peft_model.get_input_embeddings().weight) == id(self.peft_model.base_model.model.lm_head.weight)}")
-
+            
         self.ts_conv_module=ConvFeatureExtraction(self.conv_layers,dropout=0.1)
         self.ts_transformer=PatchTSTEncoder(patch_len=self.P,n_layers=2,d_model=512,n_heads=4,
                                 shared_embedding=True,d_ff=1024,norm='Layer',attn_dropout=0.,dropout=0.1,activation='gelu',store_attn=False,res_attention=False,pre_norm=True,pe='zeros',learn_pe=True,verbose=False)
@@ -108,7 +108,6 @@ class LLM_wrapper(nn.Module):
         ##ts_encoder state_dict loading
         ts_enc_state_dict = torch.load(ts_checkpoint, map_location=self.device)
         self.ts_encoder.load_state_dict(ts_enc_state_dict,strict=False)
-        
         self.ts_encoder.to(self.device)
         
     def assemble_input_embeds(self,input_ids,ts_embeddings,ts_token_idx,text_token_idx,ts_pairs:torch.tensor):
