@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 ##from TS_encoder import PatchTSTEncoder
 from  transformers import AutoModelForCausalLM,AutoTokenizer
-from ts_dataloader import ts_textual,collate_func
+from ts_dataloader_ import ts_textual,collate_func
 import os
 import sys
 import numpy as np
@@ -26,16 +26,14 @@ model = AutoModelForCausalLM.from_pretrained(model_name,local_files_only=True)
 ##expanded tokenizer path
 tokenizer_path =os.path.join(os.environ["SLURM_TMPDIR"],'llm_tokenizer')
 tokenizer_modified =AutoTokenizer.from_pretrained(tokenizer_path)
-
 model_dtype=next(model.parameters()).dtype
-
 ## to expand the tokenizer to add the special tokens <ts> <ts/>
 """special_token_dict={'pad_token':"<|pad|>","additional_special_tokens":['<ts>','<ts/>']}
 tokenizer.add_special_tokens(special_token_dict)"""
 ##model.resize_token_embeddings(len(tokenizer))
 ##dataset fetching
 import json
-_json_file = os.path.join(os.environ["SLURM_TMPDIR"],"processed_dataset.jsonl")
+_json_file = os.path.join(os.environ["SLURM_TMPDIR"],"sft_train.jsonl")
 ###datapipeline
 dataset=ts_textual(128,128,tokenizer_modified,_json_file,device=device)
 dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:collate_func(b,tokenizer=tokenizer_modified))
@@ -130,7 +128,6 @@ class LLM_wrapper(nn.Module):
             # Fallback if PEFT isn't initialized or for base mode
             input_embeds = embed_module(input_ids)
         
-        
         print(f'input_embeds_shape:{input_embeds.shape}')
         ###print(f'input_embeds_shape:{input_embeds.shape}')
         ###input_embeds.requires_grad_(requires_grad=True)
@@ -173,8 +170,8 @@ class LLM_wrapper(nn.Module):
         return output,input_embeddings
     
 ##load the pre-trained weights
-ts_encoder_weights=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver2.pth')
-embed_path=os.path.join(os.environ["SLURM_TMPDIR"],'aligned_embeddings_ver2.pt')
+ts_encoder_weights=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver3.pth')
+embed_path=os.path.join(os.environ["SLURM_TMPDIR"],'aligned_embeddings.pt')
 
 conv_layers=[(128,5,1),(64,3,1)]
 model_wrapper=LLM_wrapper(tokenizer_modified,conv_layers,128,model,device=device,ts_checkpoint=ts_encoder_weights,embed_path=None,peft_config=peft_config)
@@ -191,7 +188,7 @@ def check_input_emb(peft_model):
         active_emb = emb_layer.modules_to_save.default
     else:
         active_emb = emb_layer
-
+        
     # 3. Probe the gradient
     if active_emb.weight.grad is not None:
         with torch.no_grad():
@@ -271,7 +268,6 @@ for epoch in range(1):  ##1 epochs
         epoch_loss=running_loss/num_batches
         epoch_losses.append(epoch_loss)
         ###ctr+=1
-
 ##x=len(epoch_losses)
 ###save the ts_encoder and the trained llm adapters
 saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_encoder_ver2_final.pth')
