@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 ##from TS_encoder import PatchTSTEncoder
 from  transformers import AutoModelForCausalLM,AutoTokenizer
+from transformers import get_cosine_schedule_with_warmup
 from ts_dataloader_ import ts_textual,collate_func
 import os
 import sys
@@ -43,7 +44,7 @@ dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:coll
 
 ##Lora_config defintion based on best practices
 peft_config = LoraConfig(
-            r=16, lora_alpha=32,
+            r=64, lora_alpha=64,
             target_modules=["o_proj",'qkv_proj','gate_up_proj','down_proj'],
             modules_to_save=["embed_tokens"],lora_dropout=0.1, # important for Stage-2  as to keep th ties
             task_type="CAUSAL_LM",ensure_weight_tying=True)
@@ -231,13 +232,25 @@ encoder_params = list(model_wrapper.ts_encoder.parameters())
 llm_trainable_params = [p for n,p in model_wrapper.peft_model.named_parameters() if p.requires_grad]
 
 optimizer = torch.optim.AdamW([
-    {'params': encoder_params, 'lr': 1e-4},      # Physics: Fast learning
-    {'params': llm_trainable_params, 'lr': 5e-5}])
+    {'params': encoder_params, 'lr': 1e-4,'weight_decay':0.05},      # Physics: Fast learning
+    {'params': llm_trainable_params, 'lr': 2e-5,'weight_decay':0.01}]) ##slow learning lm 
 
 ##** freeze the LLM for stage-1 training
 epoch_losses=[]
+num_epochs=1
+###adaptive learning rate
+steps_per_epoch = len(dataloader) # This is Total Samples / Batch Size
+total_steps = num_epochs * steps_per_epoch
+num_warmup_steps = int(0.1 * total_steps)
 
-for epoch in range(1):  ##1 epochs
+###schedulers
+scheduler = get_cosine_schedule_with_warmup(
+    optimizer,  
+    num_warmup_steps=num_warmup_steps,
+    num_training_steps=total_steps
+)
+
+for epoch in range(num_epochs):  ##1 epochs
     pbar = tqdm(dataloader, desc=f"Epoch {epoch}")
     num_batches = 0
     running_loss=0
@@ -263,6 +276,7 @@ for epoch in range(1):  ##1 epochs
         running_loss+=loss.item()
         num_batches+=1
         optimizer.step()
+        scheduler.step()
         ###gradient checking
         pbar.set_postfix(loss=loss.item())
         epoch_loss=running_loss/num_batches
@@ -275,7 +289,6 @@ torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
 
 ##model_wrapper.peft_model.config.save_embedding_layers = True
 model_wrapper.peft_model.save_pretrained(save_directory=os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver2'),save_embedding_layers=True)
-
 """saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver2.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
 ###embedding layer 
