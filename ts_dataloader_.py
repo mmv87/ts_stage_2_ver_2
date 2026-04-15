@@ -61,7 +61,7 @@ class ts_textual(Dataset):
                     except:
                         print('error in the line')
         
-        self.sliced_offset=self.byte_offset[:5000]
+        self.sliced_offset=self.byte_offset[:7500]
 
     def __len__(self):
         return len(self.sliced_offset)
@@ -307,7 +307,6 @@ class ts_textual(Dataset):
         ts_pairs,text_tokens_pre_meta_prompt=self.ts_pair_indices(combined_ids)
         ts_start=torch.tensor(ts_pairs)[:,0]        
         new_text_tokens,total_text_tokens=self.insert_meta_prompt(combined_ids,meta_prompt,ts_start)
-        
         ###print(f'total_textual:{new_text_tokens.shape}')
         ts_patched =self.pad_and_patchify(norm_ts,self.patch_len,self.stride)
         ch=ts_patched.shape[0]
