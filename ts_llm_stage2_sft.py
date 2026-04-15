@@ -258,8 +258,8 @@ for epoch in range(1):  ##1 epochs
         outputs,_= model_wrapper(input_ids=input_ids,ts_input=ts_input,ts_pairs=ts_pairs,ts_idx=ts_indices,text_idx=textual_indices,attention_mask=attention_mask,labels=labels_batch,)
         loss=outputs.loss
         loss.backward()  
-        ##check_ts_gradients(model_wrapper.ts_encoder)##gradient calculation
-        check_input_emb(model_wrapper.peft_model)
+        check_ts_gradients(model_wrapper.ts_encoder)##gradient calculation
+        #check_input_emb(model_wrapper.peft_model)
         running_loss+=loss.item()
         num_batches+=1
         optimizer.step()
