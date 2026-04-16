@@ -288,7 +288,9 @@ saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_encoder_ver2_final.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
 
 ##model_wrapper.peft_model.config.save_embedding_layers = True
-model_wrapper.peft_model.save_pretrained(save_directory=os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver2'),save_embedding_layers=True)
+##save the llm_model
+save_path=os.path.join(os.environ["SLURM_TMPDIR"],'phi4-ts-adapter_ver3')
+model_wrapper.peft_model.save_pretrained(save_path,safe_serialization=True,save_embedding_layers=True)
 """saved_file=os.path.join(os.environ["SLURM_TMPDIR"],'ts_enc_stage1_ver2.pth')
 torch.save(model_wrapper.ts_encoder.state_dict(),saved_file)
 ###embedding layer 
