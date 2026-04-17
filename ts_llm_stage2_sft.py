@@ -36,7 +36,7 @@ tokenizer.add_special_tokens(special_token_dict)"""
 import json
 _json_file = os.path.join(os.environ["SLURM_TMPDIR"],"sft_train.jsonl")
 ###datapipeline
-dataset=ts_textual(128,128,tokenizer_modified,_json_file,device=device)
+dataset=ts_textual(128,128,tokenizer_modified,_json_file,15000,device=device)
 dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:collate_func(b,tokenizer=tokenizer_modified))
 """
 dataset= ts_multimodal_text(128,128,_json_file,tokenizer,device=device,model_dtype=None)
@@ -44,7 +44,7 @@ dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:coll
 
 ##Lora_config defintion based on best practices
 peft_config = LoraConfig(
-            r=64, lora_alpha=64,
+            r=64, lora_alpha=32,
             target_modules=["o_proj",'qkv_proj','gate_up_proj','down_proj'],
             modules_to_save=["embed_tokens"],lora_dropout=0.1, # important for Stage-2  as to keep th ties
             task_type="CAUSAL_LM",ensure_weight_tying=True)
@@ -233,7 +233,7 @@ llm_trainable_params = [p for n,p in model_wrapper.peft_model.named_parameters()
 
 optimizer = torch.optim.AdamW([
     {'params': encoder_params, 'lr': 1e-4,'weight_decay':0.05},      # Physics: Fast learning
-    {'params': llm_trainable_params, 'lr': 2e-5,'weight_decay':0.01}]) ##slow learning lm 
+    {'params': llm_trainable_params, 'lr': 1e-5,'weight_decay':0.01}]) ##slow learning lm 
 
 ##** freeze the LLM for stage-1 training
 epoch_losses=[]
@@ -265,7 +265,6 @@ for epoch in range(num_epochs):  ##1 epochs
         ts_indices=batch["ts_indices"].to(device)
         textual_indices=batch['textual_indices'].to(device)
         ###ts_mask = batch['ts_mask'].to(device)
-        
         ##model_wrapper=LLM_wrapper(tokenizer,ts_input,model,device=device)
         optimizer.zero_grad()
         outputs,_= model_wrapper(input_ids=input_ids,ts_input=ts_input,ts_pairs=ts_pairs,ts_idx=ts_indices,text_idx=textual_indices,attention_mask=attention_mask,labels=labels_batch,)

@@ -40,13 +40,14 @@ tokenizer.add_special_tokens(special_token_dict)
     ### if the max_N and max_ch is fixed the indices of te assembled ts_tokens are fixed
 
 class ts_textual(Dataset): 
-    def __init__(self,patch_len,stride,tokenizer,file,device=device):
+    def __init__(self,patch_len,stride,tokenizer,file,sample_size,device=device):
         super().__init__()
         self.patch_len=patch_len
         self.stride=stride
         self.tokenizer=tokenizer
         self.file=file
         self.device =device
+        self.num_of_samples=sample_size
         self.byte_offset=[]
         
         with open(self.file,'rb') as f:
@@ -61,7 +62,7 @@ class ts_textual(Dataset):
                     except:
                         print('error in the line')
         
-        self.sliced_offset=self.byte_offset[:10000]
+        self.sliced_offset=self.byte_offset[:self.num_of_samples]
 
     def __len__(self):
         return len(self.sliced_offset)
