@@ -12,24 +12,24 @@ import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 device ='cuda' if torch.cuda.is_available() else 'cpu'
 
-"""
+
 abs_modelpath="D:/hf_cache/hub/models--microsoft--Phi-4-mini-reasoning/snapshots/0e3b1e2d02ee478a3743abe3f629e9c0cb722e0a"
 ##print('path_read')
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
 model_name='./hub/microsoft/phi-4-mini-reasoning'
 device ='cpu'
+"""
 print(device)
 model=AutoModelForCausalLM.from_pretrained(abs_modelpath,local_files_only=True)
-model.to(device)
+model.to(device)"""
 tokenizer=AutoTokenizer.from_pretrained(abs_modelpath,local_file_only=True)
-input_text='The following timeseries in the model'
-tokenized = tokenizer(input_text,return_tensors='pt',add_special_tokens=False)['input_ids'][0]
+
 ###add special_tokens to the tokenizer
 special_token_dict={'pad_token':"<|pad|>","additional_special_tokens":['<ts>','<ts/>']}
 tokenizer.add_special_tokens(special_token_dict)
 ##align_256_file='D:/Doctoral_research/code_implementation/Time_series_reasoning/training_dataset/ChatTS-Training-Dataset/align_256/train.jsonl'"""
-###sft_file='D:/Doctoral_research/code_implementation/Time_series_reasoning/training_dataset/ChatTS-Training-Dataset/sft/sft_train.jsonl'"""
+sft_file='D:/Doctoral_research/code_implementation/Time_series_reasoning/training_dataset/ChatTS-Training-Dataset/sft/sft_train.jsonl'
 
 ##print(align_256_file)
 ## Dataset class to get the pipeline for a sample
@@ -298,7 +298,8 @@ class ts_textual(Dataset):
         output = sample['output']
         timeseries=sample['timeseries'] ###list of lists
         
-        input_ids=self.tokenizer(input,return_tensors='pt',add_special_tokens=False)['input_ids'][0]
+        prompt=f"<|system|>You are helpful AI assistant<|end|><|user|>{input}<|end|><|assistant|>"
+        input_ids=self.tokenizer(prompt,return_tensors='pt',add_special_tokens=False)['input_ids'][0]
         output_ids=self.tokenizer(output,return_tensors='pt',add_special_tokens=False)['input_ids'][0]
         ###total_textual_ids
         combined_ids=torch.cat([input_ids,output_ids],dim=0)
@@ -354,14 +355,16 @@ def collate_func(batch,tokenizer=None):
 ###dataset=ts_textual(128,128,_json_path,tokenizer_modified,device=device,model_dtype=None)
 ##dataloader
 """
-dataset_for_test=ts_textual(128,128,tokenizer,sft_file,device=device)
+dataset_for_test=ts_textual(128,128,tokenizer,sft_file,100,device=device)
 dataloader=DataLoader(dataset_for_test,batch_size=1,shuffle=True,collate_fn=lambda b:collate_func(b,tokenizer=tokenizer))
-input_embeds = model.get_input_embeddings()
+##input_embeds = model.get_input_embeddings()
 for idx,batch in enumerate(dataloader):
-    print(batch['time_series'].shape)
-    print(tokenizer.decode(batch['input_ids'][0]))
-    print(f"input_ids:{batch['input_ids'].shape}")
-    text_embedding = input_embeds(batch['input_ids'])
-    print(f'textual_embedding{text_embedding.shape}')
-    print(batch['labels'].shape)
-    print(batch['attention_mask'].shape)"""
+    if idx<4:
+        print(batch['time_series'].shape)
+        print(tokenizer.decode(batch['input_ids'][0]))
+        print(f"input_ids:{batch['input_ids'].shape}")
+        ##text_embedding = input_embeds(batch['input_ids'])
+        ##print(f'textual_embedding{text_embedding.shape}')
+        print(batch['labels'].shape)
+        print(batch['attention_mask'].shape)
+    else: break"""
