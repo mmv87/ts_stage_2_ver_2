@@ -44,7 +44,7 @@ dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:coll
 
 ##Lora_config defintion based on best practices
 peft_config = LoraConfig(
-            r=64, lora_alpha=32,
+            r=32, lora_alpha=32,
             target_modules=["o_proj",'qkv_proj','gate_up_proj','down_proj'],
             modules_to_save=["embed_tokens"],lora_dropout=0.1, # important for Stage-2  as to keep th ties
             task_type="CAUSAL_LM",ensure_weight_tying=True)
