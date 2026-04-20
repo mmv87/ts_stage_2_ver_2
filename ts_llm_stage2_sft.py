@@ -36,7 +36,7 @@ tokenizer.add_special_tokens(special_token_dict)"""
 import json
 _json_file = os.path.join(os.environ["SLURM_TMPDIR"],"sft_train.jsonl")
 ###datapipeline
-dataset=ts_textual(128,128,tokenizer_modified,_json_file,25000,device=device)
+dataset=ts_textual(128,128,tokenizer_modified,_json_file,20000,device=device)
 dataloader=DataLoader(dataset,batch_size=1,shuffle=True,collate_fn=lambda b:collate_func(b,tokenizer=tokenizer_modified))
 """
 dataset= ts_multimodal_text(128,128,_json_file,tokenizer,device=device,model_dtype=None)
@@ -232,7 +232,7 @@ encoder_params = list(model_wrapper.ts_encoder.parameters())
 llm_trainable_params = [p for n,p in model_wrapper.peft_model.named_parameters() if p.requires_grad]
 
 optimizer = torch.optim.AdamW([
-    {'params': encoder_params, 'lr': 1e-4,'weight_decay':0.05},      # Physics: Fast learning
+    {'params': encoder_params, 'lr': 2e-4,'weight_decay':0.05},      # Physics: Fast learning
     {'params': llm_trainable_params, 'lr': 1e-5,'weight_decay':0.01}]) ##slow learning lm 
 
 ##** freeze the LLM for stage-1 training
